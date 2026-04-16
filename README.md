@@ -16,7 +16,36 @@ Al conectar la tableta, el sistema operativo no la reconoce como una sola entida
 * **El Lápiz (Pen):** Controla el cursor, la presión y la escala. (Objetivo de este script).
 * **Los Botones (Pad):** Se registran como un dispositivo de **Teclado** independiente (ej. `T505 Graphic Tablet Keyboard`).
 
-# MOSTRAR MI OUTPUT PARA ESE COMANDO
+
+### Ejemplo Práctico: Leyendo la salida de `xinput`
+
+Para entender esta fragmentación, analicemos un caso real. Al conectar una tableta Gadnic T505 y ejecutar `xinput list`, el sistema nos devuelve lo siguiente:
+
+```bash
+⎡ Virtual core pointer                    id=2    [master pointer  (3)]
+⎜   ↳ SZ PING-IT INC. T505 Graphic Tablet Mouse           id=16   [slave  pointer  (2)]
+⎜   ↳ SZ PING-IT INC. T505 Graphic Tablet Keyboard        id=18   [slave  pointer  (2)]
+⎜   ↳ SZ PING-IT INC. T505 Graphic Tablet Pen (0)         id=21   [slave  pointer  (2)]
+⎜   ↳ input-remapper SZ PING-IT INC... forwarded          id=22   [slave  pointer  (2)]
+⎣ Virtual core keyboard                   id=3    [master keyboard (2)]
+    ↳ SZ PING-IT INC. T505 Graphic Tablet                 id=17   [slave  keyboard (3)]
+    ↳ SZ PING-IT INC. T505 Graphic Tablet Keyboard        id=19   [slave  keyboard (3)]
+    ↳ SZ PING-IT INC. T505 Graphic Tablet                 id=20   [slave  keyboard (3)]
+    ↳ input-remapper SZ PING-IT INC... forwarded          id=23   [slave  keyboard (3)]
+```
+
+Aunque físicamente tienes un solo dispositivo de plástico en tu escritorio, X11 lo divide en dos categorías principales:
+
+1. La zona de dibujo (Puntero): Busca bajo la sección Virtual core pointer. El dispositivo que nos interesa para ajustar la escala y la rotación del trazo es el que contiene la palabra "Pen" (en este ejemplo, el id=21). Ignora las entradas de "Mouse" o "Keyboard" en esta sección.
+
+   *Este es el dispositivo que nuestro script TabletScale-Linux configura.*
+
+2. Los botones físicos (Teclado): Busca bajo la sección Virtual core keyboard. Los botones laterales de tu tableta no envían clics de ratón, sino combinaciones de teclas (ej. enviar la tecla F13 o la letra B). En este caso, el dispositivo que procesa esas pulsaciones es el id=19 (Tablet Keyboard).
+
+   *Este es el dispositivo que debes seleccionar en programas como input-remapper para configurar tus atajos.*
+
+Nota sobre input-remapper: Si ves entradas que dicen forwarded (como los IDs 22 y 23), son dispositivos virtuales creados por el software de remapeo para inyectar tus atajos. Nunca uses estos IDs para configurar la tableta directamente; usa siempre los dispositivos de hardware originales.
+
 ---
 
 ## El Problema

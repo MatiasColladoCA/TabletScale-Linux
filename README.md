@@ -125,6 +125,3 @@ Si tienes una tableta que no es detectada automáticamente o quieres mejorar la 
 **Desarrollado por Matías Collado**
 
 ---
-
-# TabletScale-Linux
-# TabletScale-Linux

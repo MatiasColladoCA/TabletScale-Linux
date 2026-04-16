@@ -127,3 +127,4 @@ Si tienes una tableta que no es detectada automáticamente o quieres mejorar la 
 ---
 
 # TabletScale-Linux
+# TabletScale-Linux

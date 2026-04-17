@@ -1,106 +1,103 @@
 # TabletScale-Linux 🖊️
 
-**TabletScale-Linux** es un script ligero diseñado para corregir la hipersensibilidad y las deformaciones de aspecto en tabletas gráficas de marcas genéricas (Gadnic, Huion, Ugee, XP-Pen) cuando se usan en Linux (X11).
+**TabletScale-Linux** is a lightweight script designed to fix hypersensitivity and aspect ratio distortions in generic graphic tablets (Gadnic, Huion, Ugee, XP-Pen) when used on Linux (X11).
 
 ---
 
-## Contexto Técnico: Por qué xsetwacom no funciona
+## Technical Context: Why `xsetwacom` fails
 
-Las tabletas genéricas (identificadas como `SZ PING-IT INC.` o chipsets `Gotop`) son gestionadas en Linux por el driver básico del kernel `hid-generic`. 
-* **Limitación:** Herramientas estándar de la industria como `xsetwacom` o `OpenTabletDriver` requieren drivers específicos (como `wacom` o *report parsers* dedicados). Al usar `hid-generic`, la tableta es invisible para ellos.
-* **Solución:** Este script interactúa directamente con el servidor X11 mediante `xinput`, alterando la **Matriz de Transformación de Coordenadas**, evadiendo la necesidad de drivers privativos.
+Generic tablets (often identified as `SZ PING-IT INC.` or using `Gotop` chipsets) are managed in Linux by the core kernel driver `hid-generic`. 
+* **The Limitation:** Industry-standard tools like `xsetwacom` or `OpenTabletDriver` require specific drivers (like `wacom`) or dedicated report parsers. When using `hid-generic`, the tablet remains "invisible" to these specialized tools.
+* **The Solution:** This script interacts directly with the X11 server via `xinput`, modifying the **Coordinate Transformation Matrix**, bypassing the need for proprietary drivers.
 
-### Fragmentación del Dispositivo
-Al conectar la tableta, el sistema operativo no la reconoce como una sola entidad, sino que la fragmenta en múltiples interfaces virtuales. Puedes verificarlo ejecutando `xinput list`.
+### Hardware Fragmentation
+When connected, the operating system doesn't recognize the tablet as a single entity; instead, it fragments it into multiple virtual interfaces. You can verify this by running `xinput list`.
 
-* **El Lápiz (Pen):** Controla el cursor, la presión y la escala. (Objetivo de este script).
-* **Los Botones (Pad):** Se registran como un dispositivo de **Teclado** independiente (ej. `T505 Graphic Tablet Keyboard`).
+* **The Pen (Stylus):** Controls the cursor, pressure, and scaling. (**Target of this script**).
+* **The Buttons (Pad):** Registered as an independent **Keyboard** device (e.g., `T505 Graphic Tablet Keyboard`).
 
+### Practical Example: Analyzing `xinput` Output
 
-### Ejemplo Práctico: Leyendo la salida de `xinput`
-
-Para entender esta fragmentación, analicemos un caso real. Al conectar una tableta Gadnic T505 y ejecutar `xinput list`, el sistema nos devuelve lo siguiente:
+Let's look at a real-world case using a Gadnic T505. Running `xinput list` yields:
 
 ```bash
-⎡ Virtual core pointer                    id=2    [master pointer  (3)]
+⎡ Virtual core pointer                     id=2    [master pointer  (3)]
 ⎜   ↳ SZ PING-IT INC. T505 Graphic Tablet Mouse           id=16   [slave  pointer  (2)]
 ⎜   ↳ SZ PING-IT INC. T505 Graphic Tablet Keyboard        id=18   [slave  pointer  (2)]
 ⎜   ↳ SZ PING-IT INC. T505 Graphic Tablet Pen (0)         id=21   [slave  pointer  (2)]
 ⎜   ↳ input-remapper SZ PING-IT INC... forwarded          id=22   [slave  pointer  (2)]
-⎣ Virtual core keyboard                   id=3    [master keyboard (2)]
+⎣ Virtual core keyboard                    id=3    [master keyboard (2)]
     ↳ SZ PING-IT INC. T505 Graphic Tablet                 id=17   [slave  keyboard (3)]
     ↳ SZ PING-IT INC. T505 Graphic Tablet Keyboard        id=19   [slave  keyboard (3)]
     ↳ SZ PING-IT INC. T505 Graphic Tablet                 id=20   [slave  keyboard (3)]
     ↳ input-remapper SZ PING-IT INC... forwarded          id=23   [slave  keyboard (3)]
 ```
 
-Aunque físicamente tienes un solo dispositivo de plástico en tu escritorio, X11 lo divide en dos categorías principales:
+Although you have a single physical device, X11 splits it into two main categories:
 
-1. La zona de dibujo (Puntero): Busca bajo la sección Virtual core pointer. El dispositivo que nos interesa para ajustar la escala y la rotación del trazo es el que contiene la palabra "Pen" (en este ejemplo, el id=21). Ignora las entradas de "Mouse" o "Keyboard" en esta sección.
+1. **The Drawing Area (Pointer):** Look under the `Virtual core pointer` section. The device we need for scaling and rotation is the one containing the word **"Pen"** (in this case, `id=21`). Ignore "Mouse" or "Keyboard" entries in this section.
+   * *This is the device configured by TabletScale-Linux.*
 
-   *Este es el dispositivo que nuestro script TabletScale-Linux configura.*
+2. **The Physical Buttons (Keyboard):** Look under the `Virtual core keyboard` section. The side buttons don't send mouse clicks; they send keycodes (e.g., F13 or the letter 'B'). Here, the device processing those strokes is `id=19` (Tablet Keyboard).
+   * *This is the device you should select in software like `input-remapper` to configure your shortcuts.*
 
-2. Los botones físicos (Teclado): Busca bajo la sección Virtual core keyboard. Los botones laterales de tu tableta no envían clics de ratón, sino combinaciones de teclas (ej. enviar la tecla F13 o la letra B). En este caso, el dispositivo que procesa esas pulsaciones es el id=19 (Tablet Keyboard).
-
-   *Este es el dispositivo que debes seleccionar en programas como input-remapper para configurar tus atajos.*
-
-Nota sobre input-remapper: Si ves entradas que dicen forwarded (como los IDs 22 y 23), son dispositivos virtuales creados por el software de remapeo para inyectar tus atajos. Nunca uses estos IDs para configurar la tableta directamente; usa siempre los dispositivos de hardware originales.
+**Note on input-remapper:** Entries marked as `forwarded` (IDs 22 and 23) are virtual devices created by the remapping software to inject your shortcuts. **Never** use these IDs to configure the tablet directly; always use the original hardware devices.
 
 ---
 
-## El Problema
-Por defecto, Linux mapea toda la superficie de tu tableta a toda la superficie de tu monitor. Si tu monitor es mucho más grande que tu tableta, un trazo de **1 cm** físico se convierte en **3 cm** en pantalla. Esto arruina la precisión y la memoria muscular, obligándote a dibujar o escribir de forma microscópica.
+## The Problem
+By default, Linux maps the entire surface of your tablet to the entire surface of your monitor. If your monitor is significantly larger than your tablet, a **1 cm** physical stroke becomes **3 cm** on screen. This destroys precision and muscle memory, forcing you to draw or write in a "microscopic" scale.
 
-## La Solución: Escala 1:1 Física
-Este script calcula automáticamente la **Coordinate Transformation Matrix** basándose en las dimensiones reales (en centímetros) de tus dispositivos. Si dibujas un círculo de 5 cm en tu tableta, obtendrás un círculo de 5 cm en tu pantalla, ubicado exactamente donde tú elijas (esquinas o centro).
+## The Solution: 1:1 Physical Scaling
+This script automatically calculates the **Coordinate Transformation Matrix** based on the real-world dimensions (in centimeters) of your devices. If you draw a 5 cm circle on your tablet, you get a 5 cm circle on your screen, positioned exactly where you choose (center or corners).
 
 ---
 
-## Instalación y Requisitos
+## Installation & Requirements
 
-Asegúrate de tener instaladas las dependencias necesarias:
+Ensure you have the necessary dependencies installed:
 ```bash
 sudo apt update
 sudo apt install xinput bc libnotify-bin
 ```
 
-Clona el repositorio:
+Clone the repository:
 ```bash
-git clone https://github.com/tu-usuario/TabletScale-Linux.git
+git clone https://github.com/your-username/TabletScale-Linux.git
 cd TabletScale-Linux
 chmod +x tablet-transformer.sh
 ```
 
 ---
 
-## 🛠️ Cómo usarlo
+## 🛠️ Usage
 
-1. **Identifica tu dispositivo:**
-   Ejecuta `xinput list` y busca el nombre de tu Stylus/Pen. 
-   > *Ejemplo: "SZ PING-IT INC. T505 Graphic Tablet Pen (0)"*
+1. **Identify your device:**
+   Run `xinput list` and find the name of your Stylus/Pen. 
+   > *Example: "SZ PING-IT INC. T505 Graphic Tablet Pen (0)"*
 
-2. **Ejecuta el configurador:**
+2. **Run the configurator:**
    ```bash
    ./tablet-transformer.sh
    ```
 
-3. **Ingresa los datos:**
-   * **Dimensiones de la tableta:** El área activa (puedes medirla con una regla).
-   * **Dimensiones del monitor:** El área visible de tu pantalla.
-   * **Posición:** Elige si quieres que el área de trabajo quede en el centro o arrinconada para alcanzar las herramientas del software (Krita, GIMP, Xournal++).
-   * **Modo Zurdo:** Aplica una rotación de 90° para usar la tableta en posición vertical.
+3. **Input your data:**
+   * **Tablet Dimensions:** The active area (measure it with a ruler).
+   * **Monitor Dimensions:** The visible area of your screen.
+   * **Position:** Choose if you want the active area centered or anchored to a corner (useful for reaching software toolbars in Krita, GIMP, or Xournal++).
+   * **Orientation:** Apply rotation (e.g., 90° for vertical use/left-handed mode).
 
 ---
 
-## ⚙️ Automatización (Crear un lanzador)
+## ⚙️ Automation (Create a Launcher)
 
-Para no ejecutar el script cada vez, puedes crear un archivo `.desktop` en `~/.local/share/applications/tablet.desktop`.El script debe ser ejecutable (`chmod -x`). Además, en algunos entornos, debes hacer clic derecho sobre el archivo .desktop en el gestor de archivos y seleccionar "Allow Launching" (Permitir lanzamiento). Para escribir la ruta de tu archivo no utilices (~), utiliza la ruta completa:
+To avoid running the script manually every time, create a `.desktop` file in `~/.local/share/applications/tablet.desktop`. Use the full path instead of `~`:
 
 ```ini
 [Desktop Entry]
 Type=Application
-Name=Configurar Tableta 1:1
-Exec=/ruta/a/tu/script/tablet-transformer.sh
+Name=Tablet Config 1:1
+Exec=/full/path/to/your/script/tablet-transformer.sh
 Icon=preferences-desktop-display
 Terminal=true
 Categories=Utility;
@@ -108,49 +105,50 @@ Categories=Utility;
 
 ---
 
-## 📈 ¿Cómo funciona la magia?
+## 📈 How the Magic Works
 
-El script utiliza álgebra lineal para inyectar valores en la matriz de transformación de X11. La fórmula principal es:
+The script uses linear algebra to inject values into the X11 transformation matrix. The core formula is:
 
 $$Scale = \frac{Tablet_{cm}}{Monitor_{cm}}$$
 
-La matriz resultante se aplica mediante:
-`xinput set-prop <ID> "Coordinate Transformation Matrix" <matriz>`
+The resulting matrix is applied via:
+`xinput set-prop <ID> "Coordinate Transformation Matrix" <matrix>`
 
 ---
 
-## 🎛️ Configuración de Botones Laterales (Atajos)
+## 🎛️ Configuring Side Buttons (Shortcuts)
 
-El script `TabletScale-Linux` ajusta la escala del lápiz. Para configurar los botones físicos de la tableta, se requiere un enfoque distinto debido a la fragmentación del hardware.
+While `TabletScale-Linux` handles pen scaling, configuring physical buttons requires a different approach due to hardware fragmentation.
 
-* **(1) Síntoma observado:** Comandos como `xinput set-button-map` fallan o no tienen efecto sobre los botones físicos.
-* **(2) Diagnóstico probable:** Los botones laterales no emiten eventos de ratón (buttons), sino códigos de teclado (keycodes).
-* **(3) Comandos/tests a ejecutar:**
-  1. Identificar el ID del "Keyboard" de la tableta con `xinput list`.
-  2. Ejecutar `xinput test <ID>` (ej. `xinput test 18`).
-  3. Presionar un botón físico. La salida mostrará `key press 64` (o el número correspondiente).
-* **(4) Solución sugerida:** Instalar y utilizar `input-remapper` para interceptar los keycodes y asignarles atajos.
+* **(1) Observed Symptom:** Commands like `xinput set-button-map` fail or have no effect on physical side buttons.
+* **(2) Probable Diagnosis:** Side buttons emit **keycodes** (keyboard events) rather than mouse button events.
+* **(3) Diagnostic Tests:**
+  1. Identify the Tablet "Keyboard" ID using `xinput list`.
+  2. Run `xinput test <ID>` (e.g., `xinput test 18`).
+  3. Press a physical button. The output will show `key press 64`.
+* **(4) Suggested Solution:** Use `input-remapper` to intercept these keycodes and assign them to shortcuts.
   ```bash
   sudo apt install input-remapper input-remapper-gtk
+  ```
 
 ---
 
-## Historial de Intentos y Limitaciones Conocidas
+## Implementation History & Known Limitations
 
-Para desarrolladores que busquen ampliar la compatibilidad, documenté los enfoques que **no** funcionan con hardware `Gotop / PING-IT` bajo el driver `hid-generic`:
+For developers looking to extend compatibility, these are the approaches that **do not work** with `Gotop / PING-IT` hardware under the `hid-generic` driver:
 
-| Método Intentado | Resultado | Motivo Técnico |
+| Attempted Method | Result | Technical Reason |
 | :--- | :--- | :--- |
-| **Digimend-dkms** | Error de compilación | El código fuente carece de soporte para las funciones de temporización de kernels modernos (ej. error en `del_timer_sync`). |
-| **OpenTabletDriver** | Dispositivo ignorado | Ausencia de un *report parser* específico para este chipset. `hid-generic` no suelta el dispositivo para permitir la captura a nivel usuario. |
-| **Driver 10moons/WinTab** | Inoperable | Linux no permite forzar la desvinculación de `usbhid` sin romper el dispositivo temporalmente. No hay soporte nativo para drivers de Windows adaptados. |
-| **Reglas udev (`ENV{ID_IGNORE}="1"`)** | Sin efecto | Manipular `hidraw` directamente requiere escribir un traductor de datos (parser) desde cero. |
+| **Digimend-dkms** | Compilation Error | Source code lacks support for modern kernel timing functions (e.g., `del_timer_sync` error). |
+| **OpenTabletDriver** | Device Ignored | Missing specific report parser for this chipset. `hid-generic` does not release the device for user-level capture. |
+| **10moons/WinTab Driver** | Inoperable | Linux doesn't allow forcing `usbhid` unbinding without breaking the device. No native support for adapted Windows drivers. |
+| **udev Rules (`ENV{ID_IGNORE}="1"`)** | No Effect | Manipulating `hidraw` directly requires writing a custom data parser from scratch. |
 
 ---
 
-## Contribuir
-Si tienes una tableta que no es detectada automáticamente o quieres mejorar la lógica de los offsets, ¡siéntete libre de abrir un Pull Request!
+## Contributing
+If you have a tablet that isn't automatically detected or want to improve the offset logic, feel free to open a Pull Request!
 
-**Desarrollado por Matías Collado**
+**Developed by Matías Collado**
 
 ---

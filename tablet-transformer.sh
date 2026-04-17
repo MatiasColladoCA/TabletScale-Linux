@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# --- ARCHIVO DE PERSISTENCIA ---
+# --- PERSISTENCE FILE ---
 CONFIG_FILE="$HOME/.tablet_config"
 DEVICE="SZ PING-IT INC.  T505 Graphic Tablet Pen (0)"
 
-# Función para cargar valores guardados de forma segura
+# Function to load saved values safely
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
-        # Extraemos los valores usando grep y cut para evitar errores de source
+        # Extract values using grep/cut to avoid 'source' execution risks
         LAST_TW=$(grep "LAST_TW" "$CONFIG_FILE" | cut -d"'" -f2)
         LAST_TH=$(grep "LAST_TH" "$CONFIG_FILE" | cut -d"'" -f2)
         LAST_SW=$(grep "LAST_SW" "$CONFIG_FILE" | cut -d"'" -f2)
@@ -15,7 +15,7 @@ load_config() {
     fi
 }
 
-# Función para preguntar con valor por defecto
+# Function to prompt with a default value
 ask_value() {
     local prompt=$1
     local default=$2
@@ -25,15 +25,15 @@ ask_value() {
 
 load_config
 
-echo "--- 🖋️ TabletScale: Configuración Universal ---"
+echo "--- 🖋️ TabletScale: Universal Configuration ---"
 
-# 1. Obtención de Dimensiones
-TW=$(ask_value "Ancho de tableta (cm)" "$LAST_TW")
-TH=$(ask_value "Alto de tableta (cm)" "$LAST_TH")
-SW=$(ask_value "Ancho de pantalla (cm)" "$LAST_SW")
-SH=$(ask_value "Alto de pantalla (cm)" "$LAST_SH")
+# 1. Dimension Acquisition
+TW=$(ask_value "Tablet Width (cm)" "$LAST_TW")
+TH=$(ask_value "Tablet Height (cm)" "$LAST_TH")
+SW=$(ask_value "Screen Width (cm)" "$LAST_SW")
+SH=$(ask_value "Screen Height (cm)" "$LAST_SH")
 
-# Guardar valores para la próxima ejecución
+# Save values for the next session
 cat <<EOF > "$CONFIG_FILE"
 LAST_TW='$TW'
 LAST_TH='$TH'
@@ -41,34 +41,34 @@ LAST_SW='$SW'
 LAST_SH='$SH'
 EOF
 
-# Normalizar decimales
+# Normalize decimals (handle comma as decimal separator)
 tw=$(echo $TW | tr ',' '.'); th=$(echo $TH | tr ',' '.')
 sw=$(echo $SW | tr ',' '.'); sh=$(echo $SH | tr ',' '.')
 
-# Escalas base
+# Base Scaling Factors
 sx=$(echo "scale=4; $tw / $sw" | bc)
 sy=$(echo "scale=4; $th / $sh" | bc)
 
-# 2. Selección de Rotación
-echo -e "\nElija orientación de la tableta:"
-echo "[1] 0°   (Normal / Horizontal)"
-echo "[2] 90°  (Vertical / Zurdos)"
-echo "[3] 180° (Invertida)"
-echo "[4] 270° (Vertical inversa)"
-read -p "Seleccione (1-4) [1]: " rot
+# 2. Rotation Selection
+echo -e "\nChoose Tablet Orientation:"
+echo "[1] 0°   (Normal / Landscape)"
+echo "[2] 90°  (Vertical / Left-handed)"
+echo "[3] 180° (Inverted)"
+echo "[4] 270° (Inverted Vertical)"
+read -p "Select (1-4) [1]: " rot
 rot=${rot:-1}
 
-# 3. Selección de Posición
-echo -e "\nElija posición del área activa:"
-echo "[1] Centro"
-echo "[2] Inferior Derecha"
-echo "[3] Inferior Izquierda"
-echo "[4] Superior Derecha"
-echo "[5] Superior Izquierda"
-read -p "Seleccione (1-5) [1]: " pos
+# 3. Position Selection
+echo -e "\nChoose Active Area Position:"
+echo "[1] Center"
+echo "[2] Bottom Right"
+echo "[3] Bottom Left"
+echo "[4] Top Right"
+echo "[5] Top Left"
+read -p "Select (1-5) [1]: " pos
 pos=${pos:-1}
 
-# --- LÓGICA DE MATRIZ Y OFFSETS ---
+# --- MATRIX LOGIC AND OFFSETS ---
 case $rot in
     1) # 0°: [ sx 0 ox 0 sy oy 0 0 1 ]
         case $pos in
@@ -112,7 +112,7 @@ case $rot in
         ;;
 esac
 
-# --- APLICACIÓN ---
+# --- APPLICATION ---
 xinput set-prop "$DEVICE" "Coordinate Transformation Matrix" $MATRIX
-notify-send "TabletScale" "Configuración Aplicada: Rotación $rot en Posición $pos"
-echo -e "\n✅ Matriz aplicada: $MATRIX"
+notify-send "TabletScale" "Configuration Applied: Rotation $rot at Position $pos"
+echo -e "\n✅ Applied Matrix: $MATRIX"
